@@ -81,11 +81,12 @@ function parseLatLngString(str) {
  * Parses Google Maps semanticSegments format (new Timeline format).
  * This format has { semanticSegments: [ { visit, timelinePath, activity, startTime } ] }
  * Focus on visit nodes since those represent actual place visits.
+ *
+ * Returns points without specific names - names will be assigned during clustering.
  */
 function parseSemanticSegmentsJson(data) {
   const cities = [];
-  const visitedCoords = new Set(); // Track visited coordinates to avoid duplicates
-  let locationCounter = 0;
+  const visitedCoords = new Map(); // Track coordinates with dates for averaging
 
   if (!data.semanticSegments || !Array.isArray(data.semanticSegments)) {
     return cities;
@@ -93,73 +94,53 @@ function parseSemanticSegmentsJson(data) {
 
   console.log(`Scanning ${data.semanticSegments.length} semantic segments...`);
 
+  // Collect all visit points with their dates
   for (const segment of data.semanticSegments) {
-    // Only parse visit nodes - these represent actual place visits
-    // Ignore timelinePath (movement paths) and activity (journey segments)
     if (segment.visit && segment.visit.topCandidate) {
       const candidate = segment.visit.topCandidate;
-      let lat = null;
-      let lng = null;
 
-      // Extract coordinates from placeLocation
       if (candidate.placeLocation && candidate.placeLocation.latLng) {
         const coords = parseLatLngString(candidate.placeLocation.latLng);
         if (coords) {
-          lat = coords.lat;
-          lng = coords.lng;
-        }
-      }
+          let date = segment.startTime || segment.endTime;
+          if (date) {
+            date = date.split('T')[0];
+          }
 
-      // Extract date from segment
-      let date = segment.startTime || segment.endTime;
-      if (date) {
-        date = date.split('T')[0];
-      }
+          const coordKey = `${coords.lat.toFixed(3)},${coords.lng.toFixed(3)}`;
 
-      // Generate a generic English location name for clustering
-      // Names will be updated during clustering based on actual locations
-      locationCounter++;
-      let name = `Location ${locationCounter}`;
-
-      // Only add if we have valid coordinates
-      if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
-        const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
-
-        // Avoid adding duplicate visit points
-        if (!visitedCoords.has(coordKey)) {
-          visitedCoords.add(coordKey);
-          cities.push({
-            name: name,
-            latitude: parseFloat(lat.toFixed(5)),
-            longitude: parseFloat(lng.toFixed(5)),
-            date: date || new Date().toISOString().split('T')[0]
+          if (!visitedCoords.has(coordKey)) {
+            visitedCoords.set(coordKey, []);
+          }
+          visitedCoords.get(coordKey).push({
+            lat: coords.lat,
+            lng: coords.lng,
+            date: date
           });
         }
       }
     }
+  }
 
-    // Alternative: if no visit data but we have activity data, extract endpoints
-    // This helps capture movement-based location changes
-    if (!segment.visit && segment.activity && segment.activity.start && segment.activity.start.latLng) {
-      const coords = parseLatLngString(segment.activity.start.latLng);
-      if (coords) {
-        let date = segment.startTime || segment.endTime;
-        if (date) {
-          date = date.split('T')[0];
-        }
+  // Convert aggregated coordinates to cities with generic names
+  // Names will be replaced during clustering based on location
+  for (const [coordKey, points] of visitedCoords) {
+    if (points.length > 0) {
+      // Average coordinates if multiple points in same grid cell
+      const avgLat = points.reduce((sum, p) => sum + p.lat, 0) / points.length;
+      const avgLng = points.reduce((sum, p) => sum + p.lng, 0) / points.length;
 
-        const coordKey = `${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}`;
-        if (!visitedCoords.has(coordKey)) {
-          visitedCoords.add(coordKey);
-          locationCounter++;
-          cities.push({
-            name: `Location ${locationCounter}`,
-            latitude: parseFloat(coords.lat.toFixed(5)),
-            longitude: parseFloat(coords.lng.toFixed(5)),
-            date: date || new Date().toISOString().split('T')[0]
-          });
-        }
-      }
+      // Use latest date
+      const latestDate = points.reduce((latest, p) =>
+        new Date(p.date) > new Date(latest.date) ? p : latest
+      ).date;
+
+      cities.push({
+        name: "", // Empty name - will be assigned during clustering
+        latitude: parseFloat(avgLat.toFixed(5)),
+        longitude: parseFloat(avgLng.toFixed(5)),
+        date: latestDate || new Date().toISOString().split('T')[0]
+      });
     }
   }
 
@@ -274,14 +255,15 @@ async function parseRawRecordsStream(filePath) {
 
 /**
  * Clusters visited points into a structured list of unique cities.
- * Distance threshold determines clustering size (default 25km).
+ * Distance threshold determines clustering size (default 50km).
+ * Assigns intelligent names based on coordinates if point names are empty.
  */
-function clusterVisitedPoints(points, distanceThresholdKm = 25) {
+function clusterVisitedPoints(points, distanceThresholdKm = 50) {
   const clusters = [];
-  
+
   for (const pt of points) {
     let matchedCluster = null;
-    
+
     // Find if this point belongs to any existing cluster
     for (const cluster of clusters) {
       const dist = getDistance(pt.latitude, pt.longitude, cluster.latitude, cluster.longitude);
@@ -290,25 +272,26 @@ function clusterVisitedPoints(points, distanceThresholdKm = 25) {
         break;
       }
     }
-    
+
     if (matchedCluster) {
       // Update cluster details
       matchedCluster.visits_count += 1;
-      
+
       // Update to the latest visit date
       if (new Date(pt.date) > new Date(matchedCluster.last_visit_date)) {
         matchedCluster.last_visit_date = pt.date;
       }
-      
-      // If the point has a more specific city-like name than the cluster, use it
-      if (pt.name && pt.name !== "Visited Node" && !pt.name.startsWith("Node [") && 
-         (matchedCluster.name === "Visited Node" || matchedCluster.name.startsWith("Node [") || matchedCluster.name.length < pt.name.length)) {
-        matchedCluster.name = pt.name;
-      }
     } else {
-      // Create a new cluster
+      // Create a new cluster with intelligent naming
+      let clusterName = pt.name || "Unknown Location";
+
+      // If name is empty, generate one based on coordinates (region-like)
+      if (!pt.name) {
+        clusterName = generateLocationName(pt.latitude, pt.longitude);
+      }
+
       clusters.push({
-        name: pt.name,
+        name: clusterName,
         latitude: pt.latitude,
         longitude: pt.longitude,
         last_visit_date: pt.date,
@@ -317,8 +300,32 @@ function clusterVisitedPoints(points, distanceThresholdKm = 25) {
       });
     }
   }
-  
+
   return clusters;
+}
+
+/**
+ * Generate a reasonable location name based on latitude/longitude
+ * Uses broad regions/countries as fallback names
+ */
+function generateLocationName(lat, lng) {
+  // Rough geographic regions
+  if (lat > 50 && lng > -10 && lng < 40) return "Northern Europe";
+  if (lat > 45 && lat <= 50 && lng > -10 && lng < 40) return "Central Europe";
+  if (lat > 40 && lat <= 45 && lng > -10 && lng < 40) return "Southern Europe";
+  if (lat > 35 && lat <= 40 && lng > 10 && lng < 25) return "Mediterranean Region";
+  if (lat > 40 && lat <= 50 && lng > 15 && lng < 30) return "Eastern Europe";
+  if (lat > 50 && lng > 15) return "Eastern Europe";
+  if (lat > 30 && lat <= 40 && lng > -10 && lng < 15) return "Southern Mediterranean";
+  if (lat > 50 && lng < -10) return "North Atlantic";
+  if (lat > 40 && lat <= 50 && lng < -10) return "Atlantic Region";
+  if (lat > 30 && lat <= 40 && lng < -10) return "Mid Atlantic";
+  if (lat > 20 && lat <= 30 && lng > 100 && lng < 120) return "Southeast Asia";
+  if (lat > 30 && lat <= 40 && lng > 100 && lng < 120) return "East Asia";
+  if (lat > 40 && lng > 100) return "Far East";
+
+  // Default: use coordinates as name
+  return `Region (${lat.toFixed(1)}°, ${lng.toFixed(1)}°)`;
 }
 
 /**
