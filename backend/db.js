@@ -15,7 +15,7 @@ if (!fs.existsSync(dbDir)) {
 const seedCities = [
   {
     id: 1,
-    name: "Белград",
+    name: "Belgrade",
     latitude: 44.8176,
     longitude: 20.4633,
     last_visit_date: "2026-05-20",
@@ -24,7 +24,7 @@ const seedCities = [
   },
   {
     id: 2,
-    name: "Нови Сад",
+    name: "Novi Sad",
     latitude: 45.2671,
     longitude: 19.8335,
     last_visit_date: "2026-05-20",
@@ -33,7 +33,7 @@ const seedCities = [
   },
   {
     id: 3,
-    name: "Рим",
+    name: "Rome",
     latitude: 41.9028,
     longitude: 12.4964,
     last_visit_date: "2026-05-20",
@@ -42,7 +42,7 @@ const seedCities = [
   },
   {
     id: 4,
-    name: "Венеция",
+    name: "Venice",
     latitude: 45.4408,
     longitude: 12.3155,
     last_visit_date: "2026-05-20",
@@ -51,7 +51,7 @@ const seedCities = [
   },
   {
     id: 5,
-    name: "Вена",
+    name: "Vienna",
     latitude: 48.2082,
     longitude: 16.3738,
     last_visit_date: "2026-05-20",

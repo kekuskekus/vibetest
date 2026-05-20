@@ -120,12 +120,22 @@ function startDynamicLabelSizeUpdate() {
     cancelAnimationFrame(labelSizeAnimationId);
   }
 
+  let lastSize = 0.95;
+  let updateCounter = 0;
+
   function updateLabelSize() {
     if (!globeInstance) return;
 
     try {
       const camera = globeInstance.camera();
       if (!camera) {
+        labelSizeAnimationId = requestAnimationFrame(updateLabelSize);
+        return;
+      }
+
+      // Only update every 3 frames for smooth animation without jitter
+      updateCounter++;
+      if (updateCounter % 3 !== 0) {
         labelSizeAnimationId = requestAnimationFrame(updateLabelSize);
         return;
       }
@@ -138,8 +148,8 @@ function startDynamicLabelSizeUpdate() {
       );
 
       // Map distance to label size (like normal maps)
-      // Far away (distance > 350) = tiny text (0.15)
-      // Very close (distance < 80) = readable text (0.9)
+      // Far away (distance > 350) = tiny text (0.12)
+      // Very close (distance < 70) = readable text (0.95)
       const farDistance = 380;
       const closeDistance = 70;
       const farSize = 0.12;
@@ -156,7 +166,11 @@ function startDynamicLabelSizeUpdate() {
         newSize = closeSize + ratio * (farSize - closeSize);
       }
 
-      globeInstance.labelSize(newSize);
+      // Only update if size changed significantly (hysteresis to prevent jitter)
+      if (Math.abs(newSize - lastSize) > 0.01) {
+        globeInstance.labelSize(newSize);
+        lastSize = newSize;
+      }
     } catch (e) {
       console.error('Error updating label size:', e);
     }
