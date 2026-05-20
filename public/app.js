@@ -1,5 +1,5 @@
 // State management for travel map
-let currentView = 'globe'; // 'globe' or 'flat'
+let currentView = 'flat'; // 'globe' or 'flat' - default to 2D map
 let cities = [];
 let selectedCity = null;
 
@@ -22,6 +22,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initial fetch
   fetchCities();
+
+  // Switch to 2D map as default view
+  switchView('flat');
 
   // Setup Drag & Drop Handlers
   setupDragAndDrop();
@@ -184,9 +187,11 @@ function startDynamicLabelSizeUpdate() {
 // ==========================================================================
 // 2D RADAR GRID RENDERING (LEAFLET)
 // ==========================================================================
+let mapMarkers = []; // Keep track of markers for zoom-based updates
+
 function renderFlatMap() {
   const container = document.getElementById('leaflet-container');
-  
+
   if (!leafletMap) {
     // Initialize Leaflet Map centered in Europe/Atlantic coordinates
     leafletMap = L.map('leaflet-container', {
@@ -194,18 +199,22 @@ function renderFlatMap() {
       minZoom: 2,
       maxZoom: 10
     }).setView([20, 0], 2);
-    
+
     // Leaflet customized dark theme tiles (CartoDB Dark Matter)
     // The CSS custom filter makes it glow green automatically
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       attribution: '&copy; CartoDB &copy; OpenStreetMap contributors'
     }).addTo(leafletMap);
-    
+
     leafletMarkersGroup = L.layerGroup().addTo(leafletMap);
+
+    // Update label sizes on zoom
+    leafletMap.on('zoom', updateMapLabelSizes);
   }
 
   // Clear previous markers
   leafletMarkersGroup.clearLayers();
+  mapMarkers = [];
 
   // Add custom neon tactical nodes
   cities.forEach(city => {
@@ -217,26 +226,69 @@ function renderFlatMap() {
 
     const marker = L.marker([city.latitude, city.longitude], { icon })
       .addTo(leafletMarkersGroup);
-      
+
+    mapMarkers.push({ marker, city });
+
     // Bind click to open inspection
     marker.on('click', () => {
       inspectNode(city);
     });
 
-    // Elegant neon tooltip
-    marker.bindTooltip(
-      `<div style="font-family:'Share Tech Mono',monospace;color:#39ff14;background-color:#0d0e16;border:1px solid #39ff14;padding:4px 8px;border-radius:2px;box-shadow:0 0 10px rgba(57,255,20,0.3)">
-        <strong>${city.name.toUpperCase()}</strong><br>
-        VISITS: ${city.visits_count}<br>
-        LAST: ${city.last_visit_date}
-       </div>`, 
-      {
-        direction: 'top',
-        opacity: 0.95,
-        className: 'cyber-tooltip',
-        permanent: false
+    // Elegant neon tooltip with adaptive font size
+    const tooltipContent = createAdaptiveTooltip(city);
+    marker.bindTooltip(tooltipContent, {
+      direction: 'top',
+      opacity: 0.95,
+      className: 'cyber-tooltip',
+      permanent: false
+    });
+  });
+
+  // Initial label size update
+  updateMapLabelSizes();
+}
+
+function createAdaptiveTooltip(city) {
+  return `<div style="font-family:'Share Tech Mono',monospace;color:#39ff14;background-color:#0d0e16;border:1px solid #39ff14;padding:4px 8px;border-radius:2px;box-shadow:0 0 10px rgba(57,255,20,0.3);font-size:var(--tooltip-size, 11px)">
+    <strong>${city.name.toUpperCase()}</strong><br>
+    VISITS: ${city.visits_count}<br>
+    LAST: ${city.last_visit_date}
+  </div>`;
+}
+
+function updateMapLabelSizes() {
+  if (!leafletMap) return;
+
+  const zoom = leafletMap.getZoom();
+
+  // Adapt font size based on zoom level
+  // Zoom 2-3: 8px, Zoom 4-6: 10px, Zoom 7+: 12px
+  let fontSize = '8px';
+  if (zoom >= 4 && zoom < 7) {
+    fontSize = '10px';
+  } else if (zoom >= 7) {
+    fontSize = '12px';
+  }
+
+  // Update all tooltips
+  mapMarkers.forEach(({ marker, city }) => {
+    const tooltipElement = marker.getTooltip();
+    if (tooltipElement) {
+      const contentDiv = tooltipElement.getContent();
+      if (contentDiv instanceof HTMLElement) {
+        contentDiv.style.fontSize = fontSize;
       }
-    );
+    }
+  });
+
+  // Also update marker visibility based on zoom for cleaner map
+  mapMarkers.forEach(({ marker, city }) => {
+    if (zoom < 3) {
+      // At low zoom, only show major cities (visits_count > 100)
+      marker.setOpacity(city.visits_count > 100 ? 1 : 0.3);
+    } else {
+      marker.setOpacity(1);
+    }
   });
 }
 
