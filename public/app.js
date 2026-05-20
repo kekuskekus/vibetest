@@ -1,5 +1,5 @@
 // State management for travel map
-let currentView = 'flat'; // 'globe' or 'flat' - default to 2D map
+let currentView = 'globe'; // Start with globe, then switch to flat
 let cities = [];
 let selectedCity = null;
 
@@ -23,8 +23,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initial fetch
   fetchCities();
 
-  // Switch to 2D map as default view
-  switchView('flat');
+  // Delay switching to 2D to ensure renderGlobe completes first
+  setTimeout(() => {
+    switchView('flat');
+  }, 100);
 
   // Setup Drag & Drop Handlers
   setupDragAndDrop();
@@ -94,7 +96,7 @@ function renderGlobe() {
       .labelLat(d => d.latitude)
       .labelLng(d => d.longitude)
       .labelText(d => d.name.toUpperCase())
-      .labelSize(1.6) // Initial size, will be updated dynamically
+      .labelSize(0.8) // Fixed small size to avoid overlapping on 3D
       .labelDotRadius(() => 0.35) // Fixed radius for all cities (not dependent on visits)
       .labelColor(() => '#39ff14')
       .labelResolution(3)
@@ -109,8 +111,7 @@ function renderGlobe() {
       globeInstance.controls().autoRotate = false;
     });
 
-    // Start animation loop for dynamic label size
-    startDynamicLabelSizeUpdate();
+    // Don't start dynamic label size updates - use fixed size instead to avoid clutter
   } else {
     // Just update the data
     globeInstance.labelsData(cities);
