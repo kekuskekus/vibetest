@@ -24,14 +24,17 @@ const upload = multer({
 app.use(express.json({ charset: 'utf-8' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Set UTF-8 charset for all responses
-app.use((req, res, next) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  next();
-});
-
 // Serve static assets from public folder
 app.use(express.static(path.join(__dirname, '../public')));
+
+// Set UTF-8 charset only for JSON API responses
+app.use((req, res, next) => {
+  // Only set JSON charset if this is an API request
+  if (req.path.startsWith('/api/')) {
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  }
+  next();
+});
 
 // Request logging middleware
 app.use((req, res, next) => {
