@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NEXUS // Cyberpunk Travel Globe</title>
+  <meta name="description" content="Personal travel map visualizer and timeline parser with immersive green-glowing 3D globe and tactical 2D grid maps.">
+  
+  <!-- Google Fonts for ultimate Cyberpunk theme -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Leaflet 2D Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  
+  <!-- Theme Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Cyber Scanline Effect -->
+  <div class="scanlines"></div>
+
+  <div class="app-container">
+    <!-- HEADER BAR -->
+    <header class="cyber-header">
+      <div class="header-logo">
+        <i class="fa-solid fa-satellite-dish neon-flicker"></i>
+        <h1>NEXUS // TRAVEL LOG</h1>
+      </div>
+      <div class="header-status">
+        <span class="status-indicator online"></span>
+        <span class="status-text">SYS_ONLINE // SECURE_SESSION</span>
+      </div>
+    </header>
+
+    <!-- MAIN GRID LAYOUT -->
+    <div class="main-grid">
+      <!-- LEFT HUD CONTROL PANEL -->
+      <aside class="control-panel">
+        <!-- VISUAL CONTROL CENTER -->
+        <section class="cyber-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-eye"></i> SYSTEM VISUALS</h3>
+            <span class="cyber-corner-tr"></span>
+          </div>
+          <div class="card-body">
+            <div class="visual-toggles">
+              <button id="btn-globe" class="cyber-btn active" onclick="switchView('globe')">
+                <i class="fa-solid fa-earth-americas"></i> 3D GLOBE
+              </button>
+              <button id="btn-flat" class="cyber-btn" onclick="switchView('flat')">
+                <i class="fa-solid fa-map"></i> 2D RADAR
+              </button>
+            </div>
+            
+            <div class="stats-hud">
+              <div class="stat-item">
+                <div class="stat-label">EXPLORED NODES</div>
+                <div id="stat-cities-count" class="stat-value text-neon-green">00</div>
+              </div>
+              <div class="stat-item">
+                <div class="stat-label">TOTAL PINGS</div>
+                <div id="stat-visits-count" class="stat-value text-cyber-blue">00</div>
+              </div>
+              <div class="stat-item full-width">
+                <div class="stat-label">LAST RECORDED COORDINATE</div>
+                <div id="stat-last-visit" class="stat-value text-neon-pink text-small">N/A</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- DATA INGESTION -->
+        <section class="cyber-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-file-import"></i> TIMELINE INGESTION</h3>
+            <span class="cyber-corner-tr"></span>
+          </div>
+          <div class="card-body">
+            <p class="section-desc">Drop your Google Maps Takeout JSON (Semantic History or raw Records.json) to synchronize nodes.</p>
+            
+            <div id="drop-zone" class="upload-drop-zone">
+              <i class="fa-solid fa-cloud-arrow-up upload-icon"></i>
+              <div class="upload-txt">UPLOAD TIMELINE JSON</div>
+              <input type="file" id="file-input" accept=".json" style="display: none;">
+            </div>
+
+            <!-- Upload progress logs -->
+            <div id="upload-progress-container" class="upload-progress hidden">
+              <div class="progress-bar-container">
+                <div id="upload-progress-bar" class="progress-bar"></div>
+              </div>
+              <div id="upload-status" class="progress-status">PARSING_LOG...</div>
+              <div id="terminal-logs" class="terminal-box"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ACTION TERMINAL -->
+        <section class="cyber-card flex-grow">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-terminal"></i> OPERATIONAL CONTROLS</h3>
+            <span class="cyber-corner-tr"></span>
+          </div>
+          <div class="card-body flex-col justify-between">
+            <div class="actions-list">
+              <button class="cyber-btn btn-outline" onclick="openAddCityModal()">
+                <i class="fa-solid fa-plus"></i> LOG NEW DESTINATION
+              </button>
+              <button class="cyber-btn btn-outline btn-warn" onclick="resetDatabase()">
+                <i class="fa-solid fa-rotate-left"></i> RESTORE DEMO DATA
+              </button>
+            </div>
+            <div class="terminal-footer">
+              SECURE LOGS V1.0.4<br>
+              PORT: 3000 // HOST: LOCAL
+            </div>
+          </div>
+        </section>
+      </aside>
+
+      <!-- VISUALIZER MAIN STAGE -->
+      <main class="visualizer-stage">
+        <!-- 3D Globe Container -->
+        <div id="globe-container" class="map-view"></div>
+        
+        <!-- 2D Tactical Grid Map Container -->
+        <div id="leaflet-container" class="map-view hidden"></div>
+        
+        <!-- Center Cyber Radar Sweep Overlay -->
+        <div class="radar-overlay"></div>
+        <div class="cyber-grid-overlay"></div>
+      </main>
+
+      <!-- RIGHT DATA DETAIL DRAWER -->
+      <aside id="inspector-drawer" class="detail-drawer collapsed">
+        <div class="drawer-header">
+          <h2><i class="fa-solid fa-microchip"></i> NODE INSPECTOR</h2>
+          <button class="close-drawer-btn" onclick="closeInspector()">
+            <i class="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+        
+        <div class="drawer-content">
+          <!-- VIEW / EDIT MODE CONTAINER -->
+          <form id="inspector-form" onsubmit="saveNodeChanges(event)">
+            <input type="hidden" id="node-id">
+            
+            <div class="cyber-form-group">
+              <label for="node-name">DESTINATION NAME</label>
+              <input type="text" id="node-name" required placeholder="e.g. Tokyo">
+            </div>
+            
+            <div class="cyber-form-row">
+              <div class="cyber-form-group">
+                <label for="node-lat">LATITUDE</label>
+                <input type="number" id="node-lat" step="any" required placeholder="0.00000">
+              </div>
+              <div class="cyber-form-group">
+                <label for="node-lng">LONGITUDE</label>
+                <input type="number" id="node-lng" step="any" required placeholder="0.00000">
+              </div>
+            </div>
+
+            <div class="cyber-form-row">
+              <div class="cyber-form-group">
+                <label for="node-last-visit">LAST RECORDED VISIT</label>
+                <input type="date" id="node-last-visit" required>
+              </div>
+              <div class="cyber-form-group">
+                <label for="node-visits-count">PINGS LOGGED</label>
+                <div class="number-stepper">
+                  <button type="button" class="step-btn" onclick="stepVisits(-1)">-</button>
+                  <input type="number" id="node-visits-count" min="1" required value="1">
+                  <button type="button" class="step-btn" onclick="stepVisits(1)">+</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="cyber-form-group">
+              <label for="node-note">ENCRYPTED MEMORY (NOTE)</label>
+              <textarea id="node-note" rows="6" placeholder="Document experiences, operations, coordinates data..."></textarea>
+            </div>
+
+            <div class="drawer-actions">
+              <button type="submit" class="cyber-btn btn-save">
+                <i class="fa-solid fa-floppy-disk"></i> COMMIT CHANGES
+              </button>
+              <button type="button" class="cyber-btn btn-delete btn-danger" onclick="deleteNode()">
+                <i class="fa-solid fa-trash-can"></i> DECOMMISSION NODE
+              </button>
+            </div>
+          </form>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- STYLED DIALOG: DIALOG / MODAL FOR CREATING A DESTINATION -->
+  <div id="add-city-modal" class="cyber-modal hidden">
+    <div class="modal-backdrop" onclick="closeAddCityModal()"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2><i class="fa-solid fa-location-crosshairs"></i> INITIALIZE NEW NODE</h2>
+        <button class="close-modal-btn" onclick="closeAddCityModal()">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <form id="add-node-form" onsubmit="createNewNode(event)">
+          <div class="cyber-form-group">
+            <label for="new-name">DESTINATION NAME</label>
+            <input type="text" id="new-name" required placeholder="e.g. Reykjavik, Iceland">
+          </div>
+          
+          <div class="cyber-form-row">
+            <div class="cyber-form-group">
+              <label for="new-lat">LATITUDE</label>
+              <input type="number" id="new-lat" step="any" required placeholder="e.g. 64.1466">
+            </div>
+            <div class="cyber-form-group">
+              <label for="new-lng">LONGITUDE</label>
+              <input type="number" id="new-lng" step="any" required placeholder="e.g. -21.9426">
+            </div>
+          </div>
+
+          <div class="cyber-form-row">
+            <div class="cyber-form-group">
+              <label for="new-last-visit">LAST VISIT DATE</label>
+              <input type="date" id="new-last-visit" required>
+            </div>
+            <div class="cyber-form-group">
+              <label for="new-visits-count">VISIT COUNT</label>
+              <input type="number" id="new-visits-count" min="1" value="1" required>
+            </div>
+          </div>
+
+          <div class="cyber-form-group">
+            <label for="new-note">ENCRYPTED MEMORY (NOTE)</label>
+            <textarea id="new-note" rows="3" placeholder="Enter custom notes..."></textarea>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="cyber-btn btn-outline" onclick="closeAddCityModal()">CANCEL</button>
+            <button type="submit" class="cyber-btn btn-save">INITIALIZE NODE</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Toast Notifications -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Leaflet JS CDN -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <!-- Globe.gl CDN (includes ThreeJS) -->
+  <script src="https://unpkg.com/globe.gl"></script>
+  
+  <!-- App Orchestration -->
+  <script src="app.js"></script>
+</body>
+</html>

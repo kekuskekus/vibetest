@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  nexus-travel-map:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nexus-travel-map
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - DATABASE_PATH=/data/database.sqlite
+      - NODE_ENV=production
+    volumes:
+      # Mounts the persistent SQLite database directory
+      - nexus_data:/data
+
+volumes:
+  nexus_data:
+    driver: local

@@ -1,0 +1,23 @@
+{
+  "name": "nexus-travel-map",
+  "version": "1.0.0",
+  "description": "Cyberpunk personal travel map app with 3D Globe and 2D Tactical radar, Docker-ready for Coolify deployment.",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node --watch backend/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^1.4.5-lts.1"
+  },
+  "optionalDependencies": {
+    "sqlite": "^5.1.1",
+    "sqlite3": "^5.1.7"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Antigravity",
+  "license": "MIT"
+}
