@@ -15,47 +15,47 @@ if (!fs.existsSync(dbDir)) {
 const seedCities = [
   {
     id: 1,
-    name: "Tokyo",
-    latitude: 35.6762,
-    longitude: 139.6503,
-    last_visit_date: "2025-01-10",
-    note: "Shibuya neon grid is the ultimate cyberpunk experience. Endless glowing towers.",
-    visits_count: 5
+    name: "Белград",
+    latitude: 44.8176,
+    longitude: 20.4633,
+    last_visit_date: "2026-05-20",
+    note: "Danube river capital with vibrant nightlife.",
+    visits_count: 1
   },
   {
     id: 2,
-    name: "Paris",
-    latitude: 48.8566,
-    longitude: 2.3522,
-    last_visit_date: "2024-05-15",
-    note: "Cyber-Louvre illuminated pyramid and nocturnal light shows are absolutely stunning.",
-    visits_count: 2
+    name: "Нови Сад",
+    latitude: 45.2671,
+    longitude: 19.8335,
+    last_visit_date: "2026-05-20",
+    note: "Second largest city in Serbia, fortress and culture.",
+    visits_count: 1
   },
   {
     id: 3,
-    name: "Reykjavik",
-    latitude: 64.1466,
-    longitude: -21.9426,
-    last_visit_date: "2023-11-20",
-    note: "Witnessed the neon green aurora dance across the pitch-black volcanic landscape.",
+    name: "Рим",
+    latitude: 41.9028,
+    longitude: 12.4964,
+    last_visit_date: "2026-05-20",
+    note: "Eternal city, history and architecture.",
     visits_count: 1
   },
   {
     id: 4,
-    name: "New York",
-    latitude: 40.7128,
-    longitude: -74.0060,
-    last_visit_date: "2024-09-08",
-    note: "Times Square sensory overload. High-tech, low-life vibes on every rainy street corner.",
-    visits_count: 3
+    name: "Венеция",
+    latitude: 45.4408,
+    longitude: 12.3155,
+    last_visit_date: "2026-05-20",
+    note: "Lagoon city, canals and gondolas.",
+    visits_count: 1
   },
   {
     id: 5,
-    name: "Sydney",
-    latitude: -33.8688,
-    longitude: 151.2093,
-    last_visit_date: "2022-04-12",
-    note: "Deep blue harbor glow and futuristic circular quay architectural silhouettes.",
+    name: "Вена",
+    latitude: 48.2082,
+    longitude: 16.3738,
+    last_visit_date: "2026-05-20",
+    note: "Vienna, classical music and architecture.",
     visits_count: 1
   }
 ];

@@ -8,6 +8,9 @@ let globeInstance = null;
 let leafletMap = null;
 let leafletMarkersGroup = null;
 
+// Animation frame ID for label size updates
+let labelSizeAnimationId = null;
+
 // ==========================================================================
 // INITIALIZATION
 // ==========================================================================
@@ -71,7 +74,7 @@ function updateStatsHUD() {
 // ==========================================================================
 function renderGlobe() {
   const container = document.getElementById('globe-container');
-  
+
   // If we haven't built the globe yet, initialize it
   if (!globeInstance) {
     // Build Globe with glowing green tactical theme
@@ -88,24 +91,80 @@ function renderGlobe() {
       .labelLat(d => d.latitude)
       .labelLng(d => d.longitude)
       .labelText(d => d.name.toUpperCase())
-      .labelSize(1.6)
-      .labelDotRadius(0.5)
+      .labelSize(1.6) // Initial size, will be updated dynamically
+      .labelDotRadius(() => 0.35) // Fixed radius for all cities (not dependent on visits)
       .labelColor(() => '#39ff14')
       .labelResolution(3)
       .onLabelClick((labelNode) => inspectNode(labelNode));
-      
+
     // Slow self-rotation on start
     globeInstance.controls().autoRotate = true;
     globeInstance.controls().autoRotateSpeed = 0.5;
-    
+
     // Stop autoRotate on user drag
     globeInstance.controls().addEventListener('start', () => {
       globeInstance.controls().autoRotate = false;
     });
+
+    // Start animation loop for dynamic label size
+    startDynamicLabelSizeUpdate();
   } else {
     // Just update the data
     globeInstance.labelsData(cities);
   }
+}
+
+// Dynamic label size based on camera distance
+function startDynamicLabelSizeUpdate() {
+  if (labelSizeAnimationId) {
+    cancelAnimationFrame(labelSizeAnimationId);
+  }
+
+  function updateLabelSize() {
+    if (!globeInstance) return;
+
+    try {
+      const camera = globeInstance.camera();
+      if (!camera) {
+        labelSizeAnimationId = requestAnimationFrame(updateLabelSize);
+        return;
+      }
+
+      // Calculate distance from camera to globe center (0,0,0)
+      const distance = Math.sqrt(
+        camera.position.x ** 2 +
+        camera.position.y ** 2 +
+        camera.position.z ** 2
+      );
+
+      // Map distance to label size (like normal maps)
+      // Far away (distance > 350) = tiny text (0.15)
+      // Very close (distance < 80) = readable text (0.9)
+      const farDistance = 380;
+      const closeDistance = 70;
+      const farSize = 0.12;
+      const closeSize = 0.95;
+
+      let newSize;
+      if (distance > farDistance) {
+        newSize = farSize;
+      } else if (distance < closeDistance) {
+        newSize = closeSize;
+      } else {
+        // Linear interpolation between far and close
+        const ratio = (distance - closeDistance) / (farDistance - closeDistance);
+        newSize = closeSize + ratio * (farSize - closeSize);
+      }
+
+      globeInstance.labelSize(newSize);
+    } catch (e) {
+      console.error('Error updating label size:', e);
+    }
+
+    labelSizeAnimationId = requestAnimationFrame(updateLabelSize);
+  }
+
+  labelSizeAnimationId = requestAnimationFrame(updateLabelSize);
 }
 
 // ==========================================================================
@@ -170,9 +229,9 @@ function renderFlatMap() {
 // Switch between 3D Globe and 2D Radar
 function switchView(view) {
   if (view === currentView) return;
-  
+
   currentView = view;
-  
+
   const btnGlobe = document.getElementById('btn-globe');
   const btnFlat = document.getElementById('btn-flat');
   const globeContainer = document.getElementById('globe-container');
@@ -184,12 +243,21 @@ function switchView(view) {
     globeContainer.classList.remove('hidden');
     leafletContainer.classList.add('hidden');
     // Force rerender to trigger animations
-    if (globeInstance) globeInstance.width(globeContainer.clientWidth);
+    if (globeInstance) {
+      globeInstance.width(globeContainer.clientWidth);
+      // Restart label size update loop
+      startDynamicLabelSizeUpdate();
+    }
   } else {
     btnGlobe.classList.remove('active');
     btnFlat.classList.add('active');
     globeContainer.classList.add('hidden');
     leafletContainer.classList.remove('hidden');
+    // Stop label size updates when switching away from globe
+    if (labelSizeAnimationId) {
+      cancelAnimationFrame(labelSizeAnimationId);
+      labelSizeAnimationId = null;
+    }
     // Force leaflet recalculation
     if (leafletMap) {
       setTimeout(() => {

@@ -57,6 +57,117 @@ function cleanCityName(name, address) {
 }
 
 /**
+ * Utility to parse strings like "41.9121836°, 12.5016623°" into lat and lng float values.
+ */
+function parseLatLngString(str) {
+  try {
+    if (!str) return null;
+    const cleanStr = str.replace(/°/g, '').replace(/[\u00b0\u02da\u1d52]/g, '').trim();
+    const parts = cleanStr.split(',');
+    if (parts.length === 2) {
+      const lat = parseFloat(parts[0].trim());
+      const lng = parseFloat(parts[1].trim());
+      if (!isNaN(lat) && !isNaN(lng)) {
+        return { lat, lng };
+      }
+    }
+  } catch (e) {
+    console.error("Failed to parse LatLng string:", str, e);
+  }
+  return null;
+}
+
+/**
+ * Parses Google Maps semanticSegments format (new Timeline format).
+ * This format has { semanticSegments: [ { visit, timelinePath, activity, startTime } ] }
+ * Focus on visit nodes since those represent actual place visits.
+ */
+function parseSemanticSegmentsJson(data) {
+  const cities = [];
+  const visitedCoords = new Set(); // Track visited coordinates to avoid duplicates
+  let locationCounter = 0;
+
+  if (!data.semanticSegments || !Array.isArray(data.semanticSegments)) {
+    return cities;
+  }
+
+  console.log(`Scanning ${data.semanticSegments.length} semantic segments...`);
+
+  for (const segment of data.semanticSegments) {
+    // Only parse visit nodes - these represent actual place visits
+    // Ignore timelinePath (movement paths) and activity (journey segments)
+    if (segment.visit && segment.visit.topCandidate) {
+      const candidate = segment.visit.topCandidate;
+      let lat = null;
+      let lng = null;
+
+      // Extract coordinates from placeLocation
+      if (candidate.placeLocation && candidate.placeLocation.latLng) {
+        const coords = parseLatLngString(candidate.placeLocation.latLng);
+        if (coords) {
+          lat = coords.lat;
+          lng = coords.lng;
+        }
+      }
+
+      // Extract date from segment
+      let date = segment.startTime || segment.endTime;
+      if (date) {
+        date = date.split('T')[0];
+      }
+
+      // Generate a generic English location name for clustering
+      // Names will be updated during clustering based on actual locations
+      locationCounter++;
+      let name = `Location ${locationCounter}`;
+
+      // Only add if we have valid coordinates
+      if (lat !== null && lng !== null && !isNaN(lat) && !isNaN(lng)) {
+        const coordKey = `${lat.toFixed(4)},${lng.toFixed(4)}`;
+
+        // Avoid adding duplicate visit points
+        if (!visitedCoords.has(coordKey)) {
+          visitedCoords.add(coordKey);
+          cities.push({
+            name: name,
+            latitude: parseFloat(lat.toFixed(5)),
+            longitude: parseFloat(lng.toFixed(5)),
+            date: date || new Date().toISOString().split('T')[0]
+          });
+        }
+      }
+    }
+
+    // Alternative: if no visit data but we have activity data, extract endpoints
+    // This helps capture movement-based location changes
+    if (!segment.visit && segment.activity && segment.activity.start && segment.activity.start.latLng) {
+      const coords = parseLatLngString(segment.activity.start.latLng);
+      if (coords) {
+        let date = segment.startTime || segment.endTime;
+        if (date) {
+          date = date.split('T')[0];
+        }
+
+        const coordKey = `${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}`;
+        if (!visitedCoords.has(coordKey)) {
+          visitedCoords.add(coordKey);
+          locationCounter++;
+          cities.push({
+            name: `Location ${locationCounter}`,
+            latitude: parseFloat(coords.lat.toFixed(5)),
+            longitude: parseFloat(coords.lng.toFixed(5)),
+            date: date || new Date().toISOString().split('T')[0]
+          });
+        }
+      }
+    }
+  }
+
+  console.log(`Parsed ${cities.length} unique visit locations from semantic segments.`);
+  return cities;
+}
+
+/**
  * Parsers a Semantic Location History JSON string.
  * This format has { timelineObjects: [ { placeVisit: { location: { latitudeE7, longitudeE7, name, address } } } ] }
  */
@@ -227,6 +338,12 @@ async function processTimelineUpload(filePath) {
       const jsonData = JSON.parse(fileContent);
       rawPoints = parseSemanticJson(jsonData);
       logOutput += `Successfully extracted ${rawPoints.length} place visits.\n`;
+    } else if (fileSnippet.includes("semanticSegments")) {
+      logOutput += "Detected Google Maps Timeline (semanticSegments) format.\n";
+      const fileContent = fs.readFileSync(filePath, 'utf8');
+      const jsonData = JSON.parse(fileContent);
+      rawPoints = parseSemanticSegmentsJson(jsonData);
+      logOutput += `Successfully extracted ${rawPoints.length} route and visit points.\n`;
     } else if (fileSnippet.includes("locations") || fileSnippet.includes("latitudeE7")) {
       logOutput += "Detected raw Google Location History (Records.json) format. Commencing fast stream parse...\n";
       rawPoints = await parseRawRecordsStream(filePath);
@@ -241,8 +358,9 @@ async function processTimelineUpload(filePath) {
     }
     
     // 2. Cluster raw points spatially to compile a cohesive list of cities
+    // Use larger clustering radius for more aggressive city grouping (50km instead of 25km)
     logOutput += "Clustering coordinate points to identify central visited regions...\n";
-    const clusters = clusterVisitedPoints(rawPoints, 25);
+    const clusters = clusterVisitedPoints(rawPoints, 50);
     logOutput += `Aggregated coordinates into ${clusters.length} unique geographical hubs.\n`;
     
     // 3. Save to database (merge or insert)
